@@ -1,63 +1,107 @@
 import streamlit as st
 import pickle
 import numpy as np
+import pandas as pd
 
-# Load the trained model
-try:
-    with open('1_model.pkl', 'rb') as model_file:
-        model = pickle.load(model_file)
-except FileNotFoundError:
-    st.error("Error: The model file '1_model.pkl' was not found. Please make sure it's in the same directory.")
-    st.stop()
-except Exception as e:
-    st.error(f"An error occurred while loading the model: {e}")
-    st.stop()
+# --- Page Config ---
+st.set_page_config(
+    page_title="🌸 Iris Species Classifier",
+    page_icon="🌸",
+    layout="centered",
+    initial_sidebar_state="expanded"
+)
 
-# Set up the Streamlit app title and description
-st.set_page_config(page_title="Iris Species Classifier", page_icon="🌸")
-st.title("Iris Species Classifier")
-st.write("Enter the measurements of the iris flower to classify its species.")
-
-# Create input widgets in a sidebar for a cleaner layout
-st.sidebar.header("User Input Features")
-
-def user_input_features():
-    sepal_length = st.sidebar.slider('Sepal Length (cm)', 4.3, 7.9, 5.8)
-    sepal_width = st.sidebar.slider('Sepal Width (cm)', 2.0, 4.4, 3.1)
-    petal_length = st.sidebar.slider('Petal Length (cm)', 1.0, 6.9, 3.7)
-    petal_width = st.sidebar.slider('Petal Width (cm)', 0.1, 2.5, 1.2)
-    data = {
-        'sepal_length': sepal_length,
-        'sepal_width': sepal_width,
-        'petal_length': petal_length,
-        'petal_width': petal_width
+# --- Custom CSS for better styling ---
+st.markdown("""
+    <style>
+    .main {
+        background-color: #f9f9f9;
     }
-    features = np.array([[sepal_length, sepal_width, petal_length, petal_width]])
-    return features
+    .stButton>button {
+        background-color: #4CAF50;
+        color: white;
+        font-weight: bold;
+        border-radius: 8px;
+        padding: 0.3rem 1rem;
+    }
+    .prediction-box {
+        background-color: #e8f5e9;
+        padding: 1.2rem;
+        border-radius: 10px;
+        text-align: center;
+        margin-top: 1rem;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    }
+    .confidence-header {
+        color: #2e7d32;
+        font-weight: bold;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
-# Get user input
-user_data = user_input_features()
+# --- Load Model ---
+@st.cache_resource
+def load_model():
+    try:
+        with open('1_model.pkl', 'rb') as f:
+            return pickle.load(f)
+    except FileNotFoundError:
+        st.error("❌ Model file `1_model.pkl` not found. Please ensure it's in the same directory.")
+        st.stop()
+    except Exception as e:
+        st.error(f"⚠️ Error loading model: {e}")
+        st.stop()
 
-# Make prediction when the 'Predict' button is clicked
-if st.sidebar.button('Predict'):
+model = load_model()
+
+# --- App Header ---
+st.title("🌸 Iris Species Classifier")
+st.markdown("🔍 Predict the species of an Iris flower based on its measurements.")
+
+# --- Input Section ---
+st.sidebar.header("📏 Input Flower Measurements")
+
+# Use columns for a cleaner layout
+col1, col2 = st.columns(2)
+
+with col1:
+    sepal_length = st.slider("Sepal Length (cm)", 4.3, 7.9, 5.8, 0.1)
+    petal_length = st.slider("Petal Length (cm)", 1.0, 6.9, 3.7, 0.1)
+
+with col2:
+    sepal_width = st.slider("Sepal Width (cm)", 2.0, 4.4, 3.1, 0.1)
+    petal_width = st.slider("Petal Width (cm)", 0.1, 2.5, 1.2, 0.1)
+
+# Prepare input array
+user_data = np.array([[sepal_length, sepal_width, petal_length, petal_width]])
+
+# --- Real-time Prediction (no button needed) ---
+try:
     prediction = model.predict(user_data)
-    
-    # Get the class names from the model
-    # The saved model object has a 'classes_' attribute containing the species names.
     species_names = model.classes_
     predicted_species = species_names[prediction[0]]
 
-    st.subheader('Prediction')
-    st.write(f"The predicted Iris species is: **{predicted_species}**")
-    
-    # You can add more info, like the confidence score or visualizations, here.
-    # The decision_function is useful for SVC.
-    # It gives the distance of the sample to the separating hyperplane.
-    
+    # Display prediction with styling
+    st.markdown('<div class="prediction-box">', unsafe_allow_html=True)
+    st.subheader("🎯 Prediction Result")
+    st.markdown(f"### **{predicted_species}**")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # --- Confidence / Decision Scores (if available) ---
     try:
         decision_scores = model.decision_function(user_data)
-        st.subheader('Prediction Confidence (Decision Scores)')
-        scores_df = pd.DataFrame(decision_scores, columns=species_names)
-        st.dataframe(scores_df)
-    except:
-        st.info("Decision scores are not available for this model type.")
+        st.markdown("### 💯 Prediction Confidence (Decision Scores)")
+        scores_df = pd.DataFrame(decision_scores, columns=species_names).T
+        scores_df.columns = ["Score"]
+        scores_df["Score"] = scores_df["Score"].round(3)
+        scores_df = scores_df.sort_values("Score", ascending=False)
+        st.dataframe(scores_df.style.highlight_max(axis=0, color='#e8f5e9'))
+    except AttributeError:
+        st.info("ℹ️ Confidence scores are not available for this model type.")
+
+except Exception as e:
+    st.error(f"❌ Prediction failed: {e}")
+
+# --- Footer ---
+st.markdown("---")
+st.caption("Built with ❤️ using Streamlit | Trained on the Iris dataset")
